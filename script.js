@@ -465,15 +465,16 @@ function renderTable() {
 
     let rows = dataToRender.map(row => ({
         date: row.Timestamp ? new Date(row.Timestamp).toLocaleDateString() : '',
+        _ts: row.Timestamp ? new Date(row.Timestamp).getTime() : 0,
         fullName: row['Full Name'] || '',
         email: row.Email || '',
         phone: row.Phone || '',
         service: row.Service || '',
         pkg: row.Package || '',
         amount: row.Amount || '',
-        paymentMode: row['Payment Mode'] || row['payment mode'] || row['Payment mode'] || '',
+        paymentMode: row['Payment Method'] || row['Payment Mode'] || row['payment mode'] || row['Payment mode'] || '',
         txnId: String(row['Transaction ID'] || '')
-    })).sort((a, b) => new Date(b.date) - new Date(a.date));
+    })).sort((a, b) => b._ts - a._ts);
 
     if (statusFilter === 'closed') {
         rows = rows.filter(r => isEntryClosed(r.txnId));
