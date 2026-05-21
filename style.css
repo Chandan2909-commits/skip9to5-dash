@@ -205,6 +205,25 @@ body {
     overflow: visible;
 }
 
+.top-bar-logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--accent-blue);
+    font-weight: 700;
+}
+
+.top-bar-logo img {
+    width: 42px;
+    height: 42px;
+    object-fit: contain;
+    border-radius: 12px;
+}
+
+.top-bar-logo span {
+    font-size: 1rem;
+}
+
 .search-bar {
     display: flex;
     align-items: center;
