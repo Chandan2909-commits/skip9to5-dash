@@ -298,8 +298,8 @@ async function syncClosedQueriesFromSheet() {
 async function syncRejectedPaymentsFromSheet() {
     if (REJECTED_PAYMENTS_API_URL === 'YOUR_REJECTED_PAYMENTS_WEB_APP_URL_HERE') return;
     try {
-        const res = await fetch(`${REJECTED_PAYMENTS_API_URL}?t=${Date.now()}`);
-        const json = await res.json();
+        const res = await fetch(`${REJECTED_PAYMENTS_API_URL}?t=${Date.now()}`, { redirect: 'follow' });
+        const json = await res.text().then(t => JSON.parse(t));
         if (json.success && Array.isArray(json.data) && json.data.length > 0) {
             rejectedPayments = new Set();
             rejectedPaymentsDetails = {};
@@ -333,8 +333,8 @@ async function fetchClosedQueriesFromSheet() {
     }
     try {
         // Add a cache-busting timestamp so browsers/CDNs never serve a stale response
-        const res = await fetch(`${CLOSED_QUERIES_API_URL}?t=${Date.now()}`);
-        const json = await res.json();
+        const res = await fetch(`${CLOSED_QUERIES_API_URL}?t=${Date.now()}`, { redirect: 'follow' });
+        const json = await res.text().then(t => JSON.parse(t));
         if (json.success && Array.isArray(json.data)) {
             return json.data; // [{ Date, Email, Phone, Messages, 'Closed On', Status }]
         }
@@ -420,21 +420,25 @@ async function fetchData() {
         // Google Sheet (source of truth) BEFORE we render anything, so
         // every page open / refresh always shows only open entries.
         const [data] = await Promise.all([
-            fetch(`${API_URL}?t=${Date.now()}`).then(r => r.json()),
+            fetch(`${API_URL}?t=${Date.now()}`, { redirect: 'follow' }).then(r => r.text()).then(t => JSON.parse(t)),
             syncClosedQueriesFromSheet(),
             syncRejectedPaymentsFromSheet()
         ]);
 
         updateClosedBadge();
 
-        sheetData = data;
-        filteredData = data;
+        // Handle both array response and wrapped response
+        const rows = Array.isArray(data) ? data : (data.data || []);
+        sheetData = rows;
+        filteredData = rows;
 
-        if (data.length > 0) {
-            sheetHeaders = ['Timestamp', 'Full Name', 'Email', 'Phone', 'Service', 'Package', 'Amount', 'Transaction ID'];
+        if (rows.length > 0) {
+            sheetHeaders = ['Timestamp', 'Full Name', 'Email', 'Phone', 'Service', 'Package', 'Amount', 'Payment Method', 'Transaction ID'];
             renderTable();
             updateStats();
             updateCharts();
+        } else {
+            console.warn('[fetchData] No rows returned from sheet. Raw response:', data);
         }
     } catch (error) {
         console.error('Error fetching data:', error);
@@ -463,18 +467,24 @@ function renderTable() {
     tableBody.innerHTML = '';
     const dataToRender = (filteredData.length > 0 || searchInput.value) ? filteredData : sheetData;
 
-    let rows = dataToRender.map(row => ({
-        date: row.Timestamp ? new Date(row.Timestamp).toLocaleDateString() : '',
-        _ts: row.Timestamp ? new Date(row.Timestamp).getTime() : 0,
-        fullName: row['Full Name'] || '',
-        email: row.Email || '',
-        phone: row.Phone || '',
-        service: row.Service || '',
-        pkg: row.Package || '',
-        amount: row.Amount || '',
-        paymentMode: row['Payment Method'] || row['Payment Mode'] || row['payment mode'] || row['Payment mode'] || '',
-        txnId: String(row['Transaction ID'] || '')
-    })).sort((a, b) => b._ts - a._ts);
+    let rows = dataToRender.map(row => {
+        // Timestamp from Google Sheets can be a Date object, ISO string, or locale string
+        const rawTs = row.Timestamp;
+        const tsDate = rawTs ? new Date(rawTs) : null;
+        const tsValid = tsDate && !isNaN(tsDate.getTime());
+        return {
+            date: tsValid ? tsDate.toLocaleDateString() : (rawTs ? String(rawTs) : ''),
+            _ts: tsValid ? tsDate.getTime() : 0,
+            fullName: row['Full Name'] || '',
+            email: row.Email || '',
+            phone: row.Phone || '',
+            service: row.Service || '',
+            pkg: row.Package || '',
+            amount: row.Amount || '',
+            paymentMode: row['Payment Method'] || row['Payment Mode'] || row['payment mode'] || row['Payment mode'] || '',
+            txnId: String(row['Transaction ID'] || '')
+        };
+    }).sort((a, b) => b._ts - a._ts);
 
     if (statusFilter === 'closed') {
         rows = rows.filter(r => isEntryClosed(r.txnId));
@@ -739,8 +749,8 @@ async function renderRejectedPaymentsSection() {
     let rows = null;
     if (REJECTED_PAYMENTS_API_URL !== 'YOUR_REJECTED_PAYMENTS_WEB_APP_URL_HERE') {
         try {
-            const res = await fetch(`${REJECTED_PAYMENTS_API_URL}?t=${Date.now()}`);
-            const json = await res.json();
+            const res = await fetch(`${REJECTED_PAYMENTS_API_URL}?t=${Date.now()}`, { redirect: 'follow' });
+            const json = await res.text().then(t => JSON.parse(t));
             if (json.success && Array.isArray(json.data)) rows = json.data;
         } catch (e) { console.error(e); }
     }
